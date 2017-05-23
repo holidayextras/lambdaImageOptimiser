@@ -1,0 +1,25 @@
+{
+  "name": "lambdaImageResizer",
+  "version": "1.0.0",
+  "author": "",
+  "description": "Package to be used as a Lambda function on s3 to resize images being passed to it",
+  "main": "index.js",
+  "private": true,
+  "license": "ISC",
+  "scripts": {
+    "lint": "standard *.js",
+    "lint:fix": "standard *.js --fix"
+  },
+  "dependencies": {
+    "async": "^2.4.1",
+    "aws-sdk": "^2.55.0",
+    "fs": "0.0.1-security",
+    "gm": "^1.23.0",
+    "imagemagick": "^0.1.3",
+    "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "deployment-helpers": "git+ssh://git@github.com:holidayextras/deployment-helpers.git",
+    "standard": "^10.0.2"
+  }
+}

@@ -1,0 +1,21 @@
+machine:
+  node:
+    version: 6.10
+dependencies:
+  pre:
+    - npm install git+ssh://git@github.com:holidayextras/deployment-helpers.git
+    - node_modules/deployment-helpers/nodeApps/preRelease.sh
+    - aws configure set default.region eu-west-1
+
+deployment:
+  production:
+    branch: master
+    commands:
+      - ./scripts/deploy.sh
+
+experimental:
+  notify:
+    branches:
+      only:
+        - master
+        - staging
