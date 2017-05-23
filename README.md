@@ -7,6 +7,7 @@ This will gives us the ability to display optimised images on the front-end by s
 # How does it work
 Set this Lambda function up as a notification on an s3 bucket with a 'Put' event.
 (Go to the bucket you want this on, click the 'Properties' tab, click on the 'Events' box and 'Add notification' as shown below)
+
 ![Screenshot](screenshot.png)
 This will now trigger the ImageResizer everytime someone uploads an image to this bucket.
 The image gets checked for type and size after which GraphicsMagick & ImageMagick will resize it to various sizes (see below) and upload it back to the same bucket as the original image.
