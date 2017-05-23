@@ -6,6 +6,9 @@ dependencies:
     - npm install git+ssh://git@github.com:holidayextras/deployment-helpers.git
     - node_modules/deployment-helpers/nodeApps/preRelease.sh
     - aws configure set default.region eu-west-1
+test:
+  override:
+    - npm test
 
 deployment:
   production:
