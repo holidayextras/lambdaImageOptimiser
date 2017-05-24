@@ -21,6 +21,10 @@ const allowedFileExtensions = ['.jpg', '.gif', '.png']
 
 // scaleFactor means the original size will be devided by that number
 const outputSizes = [{
+  scaleFactor: 1, // Will create an image with the same dimension but optimises the file size
+  suffix: 'original'
+}, {
+  // path: 'large',
   scaleFactor: 2,
   suffix: 'large'
 }, {
@@ -44,8 +48,8 @@ const processEvent = (event, context) => {
   const { ext, name } = path.parse(sourcePath)
 
   // Check if the uploaded file has a type that we can't convert or don't want to convert
-  if (!allowedFileExtensions.includes(ext) || outputSizes.some(s => sourcePath.indexOf(s.suffix) >= 0)) {
-    return context.fail(`FileType of ${sourcePath} is not supported for conversion or is itself already a converted file`)
+  if (!allowedFileExtensions.includes(ext.toLowerCase()) || outputSizes.some(s => sourcePath.indexOf(s.suffix) >= 0)) {
+    return console.log(`FileType of ${sourcePath} is not supported for conversion or is itself already a converted file`)
   }
 
   // Loop and half the width a couple of times to create smaller variants of the same image
@@ -62,12 +66,12 @@ const processEvent = (event, context) => {
 
       function process (data, next) {
         if (!data) {
-          return context.fail('No data')
+          return console.log('No data')
         }
 
         // We want to prevent an infinite loop as the `putObject` will invoke this same Lambda
         if (data.Metadata.resized) {
-          return context.fail('File has previously been resized, stopping script here.')
+          return console.log('File has previously been resized, stopping script here.')
         }
 
         // Create local image from stream and check the size of the image
@@ -75,7 +79,7 @@ const processEvent = (event, context) => {
           bufferStream: true
         }, function (error, size) {
           if (error) {
-            return context.fail(error)
+            return console.log(error)
           }
 
           // Calculate the new size based on the scaleFactor
@@ -87,7 +91,7 @@ const processEvent = (event, context) => {
           // Doing the actual resizing
           this.resize(width, height).toBuffer((error, buffer) => {
             if (error) {
-              return context.fail(error)
+              return console.log(error)
             }
             next(null, buffer)
           })
@@ -96,12 +100,18 @@ const processEvent = (event, context) => {
 
       function upload (data, next) {
         // Create new filename with size identifier in the name
-        const newFileName = sourcePath.replace(`${ext}`, `_${outputSize.suffix}${ext}`)
+        let filename = sourcePath
+        if (outputSize.path) {
+          filename = `${outputSize.path}/${filename}`
+        }
+        if (outputSize.suffix) {
+          filename = filename.replace(`${ext}`, `_${outputSize.suffix}${ext}`)
+        }
 
-        console.log(`Uploading ${newFileName} to s3 bucket ${BUCKET}`)
+        console.log(`Uploading ${filename} to s3 bucket ${BUCKET}`)
         s3.putObject({
           Bucket: BUCKET,
-          Key: newFileName,
+          Key: filename,
           Body: data,
           Metadata: {
             'resized': 'true'
@@ -110,9 +120,13 @@ const processEvent = (event, context) => {
       }
     ], (error, result) => {
       if (error) {
+        return console.log(error)
+      }
+    }, (error) => {
+      if (error) {
         return context.fail(error)
       }
-      context.succeed()
+      context.done()
     })
   })
 }
