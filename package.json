@@ -1,8 +1,8 @@
 {
-  "name": "lambdaImageResizer",
+  "name": "lambdaImageOptimiser",
   "version": "1.0.0",
   "author": "",
-  "description": "Package to be used as a Lambda function on s3 to resize images being passed to it",
+  "description": "Package to be used as a Lambda function on s3 to optimise images being passed to it",
   "main": "index.js",
   "private": true,
   "license": "ISC",
