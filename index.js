@@ -9,34 +9,18 @@ const path = require('path')
 
 AWS.config.update({
   credentials: {
-    accessKeyId: process.env.ACCESS_KEY,
-    secretAccessKey: process.env.SECRET_KEY
+    accessKeyId: process.env.ACCESS_KEY, // Is set in advanced settings
+    secretAccessKey: process.env.SECRET_KEY // Is set in advanced settings
   },
-  region: process.env.AWS_REGION
+  region: process.env.AWS_REGION // Is standard configuraiton
 })
 const s3 = new AWS.S3()
 
+// Image quality, the bigger the number, the bigger the file size
+const IMG_QUALITY = Number(process.env.IMG_QUALITY) || 85 // up to 100
+
 // Allowed extensions to convert
 const allowedFileExtensions = ['.jpg', '.gif', '.png']
-
-// scaleFactor means the original size will be devided by that number
-const outputSizes = [{
-  scaleFactor: 1, // Will create an image with the same dimension but optimises the file size
-  suffix: 'original'
-}, {
-  // path: 'large',
-  scaleFactor: 2,
-  suffix: 'large'
-}, {
-  scaleFactor: 4,
-  suffix: 'medium'
-}, {
-  scaleFactor: 8,
-  suffix: 'small'
-}, {
-  scaleFactor: 12,
-  suffix: 'thumbnail'
-}]
 
 const processEvent = (event, context) => {
   const BUCKET = event.Records[0].s3.bucket.name
@@ -48,86 +32,115 @@ const processEvent = (event, context) => {
   const { ext, name } = path.parse(sourcePath)
 
   // Check if the uploaded file has a type that we can't convert or don't want to convert
-  if (!allowedFileExtensions.includes(ext.toLowerCase()) || outputSizes.some(s => sourcePath.indexOf(s.suffix) >= 0)) {
-    return console.log(`FileType of ${sourcePath} is not supported for conversion or is itself already a converted file`)
+  if (!allowedFileExtensions.includes(ext.toLowerCase()) || /_original/.test(sourcePath)) {
+    return console.log(`FileType of ${sourcePath} is not supported for conversion.`)
   }
 
-  // Loop and half the width a couple of times to create smaller variants of the same image
-  async.forEachOf(outputSizes, outputSize => {
-    async.waterfall([
+  async.waterfall([
 
-      function download (next) {
-        // Getting object that has just been uploaded from s3
-        s3.getObject({
-          Bucket: BUCKET,
-          Key: sourcePath
-        }, next)
-      },
+    /**
+     * Reads in the raw data of the uploaded image so we can manipulate and check it
+     * @param  {Function} next calls next function in the flow
+     */
+    function download (next) {
+      s3.getObject({
+        Bucket: BUCKET,
+        Key: sourcePath
+      }, next)
+    },
 
-      function process (data, next) {
-        if (!data) {
-          return console.log('No data')
+    /**
+     * Checks the raw data to see if anything needs doing.
+     * Compresses the file with the same quality and compression or with the default values
+     * @param  {Object} data Meta data from the loaded image
+     * @param  {Function} next calls next function in the flow
+     */
+    function process (data, next) {
+      if (!data) {
+        return context.fail('No data')
+      }
+
+      // We want to prevent an infinite loop as the `putObject` will invoke this same Lambda
+      if (data.Metadata.optimised) {
+        return console.log(`Stopping as ${sourcePath} has been previously optimised.`)
+      }
+
+      // Create local image from stream and check the size of the image
+      gm(data.Body).identify({
+        bufferStream: true
+      }, function (error, data) {
+        if (error) {
+          return context.fail(error)
         }
 
-        // We want to prevent an infinite loop as the `putObject` will invoke this same Lambda
-        if (data.Metadata.resized) {
-          return console.log('File has previously been resized, stopping script here.')
-        }
-
-        // Create local image from stream and check the size of the image
-        gm(data.Body).size({
-          bufferStream: true
-        }, function (error, size) {
-          if (error) {
-            return console.log(error)
-          }
-
-          // Calculate the new size based on the scaleFactor
-          const width = Math.floor(size.width / outputSize.scaleFactor)
-          const height = Math.floor(size.height / outputSize.scaleFactor)
-
-          console.log(`Resizing ${name}${ext} to ${width}px x ${height}px`)
-
-          // Doing the actual resizing
-          this.resize(width, height).toBuffer((error, buffer) => {
+        // Compress image with existing quality and compression
+        // This might turn out to be bigger in filesize but the next step will check this
+        this
+          .quality(Math.min(data.Quality, IMG_QUALITY))
+          .compress(data.Compression || 'JPEG')
+          .toBuffer((error, buffer) => {
             if (error) {
-              return console.log(error)
+              return context.fail(error)
             }
-            next(null, buffer)
+            next(null, data, buffer)
           })
-        })
-      },
+      })
+    },
 
-      function upload (data, next) {
-        // Create new filename with size identifier in the name
-        let filename = sourcePath
-        if (outputSize.path) {
-          filename = `${outputSize.path}/${filename}`
+    /**
+     * Checks the filesize of the original and the new compressed image.
+     * It will work out if we need to overwrite the original and if we want to keep a copy
+     * of the original
+     * @param  {Object} originalData Meta data from the original image
+     * @param  {Buffer} buffer the raw data from the compressed image
+     * @param  {Function} next calls next function in the flow
+     */
+    function upload (originalData, buffer, next) {
+      // Identify new optimised image for size
+      gm(buffer).identify({
+        bufferStream: true
+      }, function (error, data) {
+        if (error) {
+          return context.fail(error)
         }
-        if (outputSize.suffix) {
-          filename = filename.replace(`${ext}`, `_${outputSize.suffix}${ext}`)
-        }
+        console.log(`Optimised filesize: ${data.Filesize} vs original filesize: ${originalData.Filesize}`)
 
-        console.log(`Uploading ${filename} to s3 bucket ${BUCKET}`)
-        s3.putObject({
-          Bucket: BUCKET,
-          Key: filename,
-          Body: data,
-          Metadata: {
-            'resized': 'true'
+        // Checking if optimised version has a smaller filesize
+        if (parseFloat(data.Filesize) < parseFloat(originalData.Filesize)) {
+          console.log('The new file is smaller so I\'m keeping it')
+
+          if (process.env.KEEP_ORIGINAL) {
+            console.log('Making copy of original')
+            // Save a copy of the original just in case
+            s3.copyObject({
+              Bucket: BUCKET,
+              CopySource: `${BUCKET}/${sourcePath}`,
+              Key: `${name}_original${ext}`
+            }, (error) => {
+              if (error) console.log(error)
+            })
           }
-        }, next)
-      }
-    ], (error, result) => {
-      if (error) {
-        return console.log(error)
-      }
-    }, (error) => {
-      if (error) {
-        return context.fail(error)
-      }
-      context.done()
-    })
+
+          console.log(`Overwritting ${sourcePath} on s3 bucket ${BUCKET} with smaller version`)
+          // Overwrite original
+          s3.putObject({
+            Body: buffer,
+            Bucket: BUCKET,
+            Key: sourcePath,
+            Metadata: {
+              'optimised': 'true'
+            }
+          }, next)
+        } else {
+          console.log('Not saving the new file as the original is smaller')
+        }
+      })
+    }
+  ], (error, result) => {
+    if (error) {
+      return context.fail(error)
+    }
+    context.done()
   })
 }
 
