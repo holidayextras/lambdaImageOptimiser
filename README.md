@@ -43,4 +43,4 @@ The easiest way to do this is to create a ZIP file of the package (including the
 
 ---
 
-Please let me know if any of this is not clear
+Please let me know if any of this is not clear.
