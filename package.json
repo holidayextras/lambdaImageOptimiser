@@ -13,11 +13,9 @@
   },
   "dependencies": {
     "async": "^2.4.1",
-    "aws-sdk": "^2.55.0",
-    "fs": "0.0.1-security",
+    "aws-sdk": "^2.58.0",
     "gm": "^1.23.0",
-    "imagemagick": "^0.1.3",
-    "path": "^0.12.7"
+    "imagemagick": "^0.1.3"
   },
   "devDependencies": {
     "deployment-helpers": "git+ssh://git@github.com:holidayextras/deployment-helpers.git",
