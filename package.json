@@ -15,7 +15,9 @@
     "async": "^2.4.1",
     "aws-sdk": "^2.58.0",
     "gm": "^1.23.0",
-    "imagemagick": "^0.1.3"
+    "imagemagick": "^0.1.3",
+    "lodash": "^4.17.4",
+    "path": "^0.12.7"
   },
   "devDependencies": {
     "deployment-helpers": "git+ssh://git@github.com:holidayextras/deployment-helpers.git",

@@ -1,10 +1,14 @@
 'use strict'
 
+const _ = {
+  get: require('lodash/get')
+}
 const async = require('async')
 const AWS = require('aws-sdk')
 const gm = require('gm').subClass({
   imageMagick: true
 })
+const path = require('path')
 
 AWS.config.update({
   credentials: {
@@ -22,16 +26,21 @@ const IMG_QUALITY = Number(process.env.IMG_QUALITY) || 85 // up to 100
 const allowedFileExtensions = ['.jpg', '.gif', '.png']
 
 const processEvent = (event, context) => {
-  const BUCKET = event.Records[0].s3.bucket.name
+  const BUCKET = _.get(event, 'Records[0].s3.bucket.name', null)
+  const KEY = _.get(event, 'Records[0].s3.object.key', null)
 
-  // Make sure to replace spaces etc. otherwise s3 can't read the image path
-  const sourcePath = decodeURIComponent(event.Records[0].s3.object.key.replace(/\+/g, ' '))
+  if (!BUCKET || !KEY) {
+    return context.fail(`'event' did not come back with a valid BUCKET or KEY`)
+  }
+
+  // Replacing spaces etc. otherwise s3 can't read the image path
+  const sourcePath = decodeURIComponent(KEY.replace(/\+/g, ' '))
 
   // Get extension and filename
-  const extension = sourcePath.substring(sourcePath.lastIndexOf('.'))
+  const { ext, base } = path.parse(sourcePath)
 
   // Check if the uploaded file has a type that we can't convert or don't want to convert
-  if (!allowedFileExtensions.includes(extension.toLowerCase()) || /_original/.test(sourcePath)) {
+  if (!allowedFileExtensions.includes(ext.toLowerCase()) || /_original/.test(sourcePath)) {
     return console.log(`FileType of ${sourcePath} is not supported for conversion.`)
   }
 
@@ -61,7 +70,7 @@ const processEvent = (event, context) => {
       }
 
       // We want to prevent an infinite loop as the `putObject` will invoke this same Lambda
-      if (data.Metadata.optimised) {
+      if (_.get(data, 'Metadata.optimised', false)) {
         return console.log(`Stopping as ${sourcePath} has been previously optimised.`)
       }
 
@@ -110,13 +119,14 @@ const processEvent = (event, context) => {
           console.log('The new file is smaller so I\'m keeping it')
 
           if (process.env.KEEP_ORIGINAL) {
-            const copiedSource = sourcePath.replace(extension, `_orginal${extension}`)
-            console.log(`Saving copy of original to ${copiedSource}`)
+            // Copy original file to 'original' folder (don't want to clutter the folder)
+            const copiedPath = sourcePath.replace(base, `original/${base}`)
+            console.log(`Saving copy of original to ${copiedPath}`)
             // Save a copy of the original just in case
             s3.copyObject({
               Bucket: BUCKET,
               CopySource: `${BUCKET}/${sourcePath}`,
-              Key: copiedSource
+              Key: copiedPath
             }, (error) => {
               if (error) console.log(error)
             })
