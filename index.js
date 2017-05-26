@@ -5,7 +5,6 @@ const AWS = require('aws-sdk')
 const gm = require('gm').subClass({
   imageMagick: true
 })
-const path = require('path')
 
 AWS.config.update({
   credentials: {
@@ -29,10 +28,10 @@ const processEvent = (event, context) => {
   const sourcePath = decodeURIComponent(event.Records[0].s3.object.key.replace(/\+/g, ' '))
 
   // Get extension and filename
-  const { ext, name } = path.parse(sourcePath)
+  const extension = sourcePath.substring(sourcePath.lastIndexOf('.'))
 
   // Check if the uploaded file has a type that we can't convert or don't want to convert
-  if (!allowedFileExtensions.includes(ext.toLowerCase()) || /_original/.test(sourcePath)) {
+  if (!allowedFileExtensions.includes(extension.toLowerCase()) || /_original/.test(sourcePath)) {
     return console.log(`FileType of ${sourcePath} is not supported for conversion.`)
   }
 
@@ -43,6 +42,7 @@ const processEvent = (event, context) => {
      * @param  {Function} next calls next function in the flow
      */
     function download (next) {
+      console.log(`Downloading ${sourcePath}`)
       s3.getObject({
         Bucket: BUCKET,
         Key: sourcePath
@@ -110,12 +110,13 @@ const processEvent = (event, context) => {
           console.log('The new file is smaller so I\'m keeping it')
 
           if (process.env.KEEP_ORIGINAL) {
-            console.log('Making copy of original')
+            const copiedSource = sourcePath.replace(extension, `_orginal${extension}`)
+            console.log(`Saving copy of original to ${copiedSource}`)
             // Save a copy of the original just in case
             s3.copyObject({
               Bucket: BUCKET,
               CopySource: `${BUCKET}/${sourcePath}`,
-              Key: `${name}_original${ext}`
+              Key: copiedSource
             }, (error) => {
               if (error) console.log(error)
             })
