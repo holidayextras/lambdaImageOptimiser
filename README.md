@@ -33,10 +33,12 @@ The easiest way to do this is to create a ZIP file of the package (including the
 ![Where to upload the ZIP file](where_to_upload_zip.png)
 
 # TODO:
+- Check what happens when image upload is cut off or anything similar in the process of optimising
 - Tests
 - More config (perhaps the destination folder or path of the original can be in here)
 - Cache invalidation
 - Make it possible to develop locally
+- Add functionality to resize?
 - Improve README
 
 ---
